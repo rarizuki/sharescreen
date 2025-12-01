@@ -14,9 +14,6 @@
   <!-- iziToast CSS -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/izitoast@1.4.0/dist/css/iziToast.min.css" />
 
-  <!-- SweetAlert2 CSS (optional, untuk styling default) -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" />
-
   <!-- Firebase compat SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
@@ -26,9 +23,6 @@
 
   <!-- iziToast JS -->
   <script src="https://cdn.jsdelivr.net/npm/izitoast@1.4.0/dist/js/iziToast.min.js"></script>
-
-  <!-- SweetAlert2 JS -->
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
 
@@ -129,7 +123,7 @@
             </h2>
             <p class="text-xs md:text-sm text-slate-400">
               Biasanya kamu akan membuka <span class="font-semibold text-indigo-300">link dari Host</span>.
-              Saat halaman terbuka, akan muncul modal untuk memasukkan password room.
+              Saat halaman terbuka dengan <code>?room=xxxx</code>, akan muncul modal password.
             </p>
           </div>
           <div class="flex flex-col md:flex-row items-stretch md:items-center gap-2">
@@ -150,14 +144,14 @@
 
         <p class="text-[11px] text-slate-500">
           Jika kamu membuka halaman ini lewat link dari host (contoh: <code>?room=xxxx</code>), akan otomatis
-          muncul popup password tanpa perlu mengisi form di atas.
+          muncul modal password tanpa perlu mengisi form di atas.
         </p>
       </section>
 
       <!-- VIDEO AREA -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
         <!-- LOCAL (HOST PREVIEW) -->
-        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-3 space-y-2" data-aos="fade-right">
+        <div id="localCard" class="bg-slate-900/70 border border-slate-800 rounded-xl p-3 space-y-2" data-aos="fade-right">
           <div class="flex items-center justify-between">
             <h3 class="text-xs md:text-sm font-semibold">Host Preview</h3>
             <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
@@ -173,7 +167,7 @@
         </div>
 
         <!-- REMOTE (VIEWER VIEW) -->
-        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-3 space-y-2" data-aos="fade-left">
+        <div id="remoteCard" class="bg-slate-900/70 border border-slate-800 rounded-xl p-3 space-y-2" data-aos="fade-left">
           <div class="flex items-center justify-between">
             <h3 class="text-xs md:text-sm font-semibold">Viewer Screen</h3>
             <button id="btnFullscreen"
@@ -201,6 +195,32 @@
         <span class="text-[10px] md:text-[11px] text-slate-500">
           Powered by <span class="font-semibold text-indigo-300">Bocco</span> · WebRTC + Firebase
         </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- PASSWORD MODAL UNTUK VIEWER (LINK MODE) -->
+  <div id="passwordModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-40 hidden">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-sm shadow-2xl">
+      <h2 class="text-sm md:text-base font-semibold mb-2">
+        Masukkan Password Room
+      </h2>
+      <p class="text-xs text-slate-400 mb-3">
+        Host sudah mengirim link room ke kamu. Masukkan password yang sama untuk mulai melihat screen.
+      </p>
+      <input id="modalPasswordInput"
+             type="password"
+             placeholder="Password Room"
+             class="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-xs md:text-sm placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 mb-3" />
+      <div class="flex justify-end gap-2">
+        <button id="modalCancelBtn"
+                class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs md:text-sm">
+          Batal
+        </button>
+        <button id="modalJoinBtn"
+                class="px-3 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 text-xs md:text-sm font-semibold">
+          Gabung
+        </button>
       </div>
     </div>
   </div>
@@ -273,6 +293,14 @@
     const btnFullscreen = document.getElementById('btnFullscreen');
     const btnHangup = document.getElementById('btnHangup');
 
+    const localCard = document.getElementById('localCard');
+    const remoteCard = document.getElementById('remoteCard');
+
+    const passwordModal = document.getElementById('passwordModal');
+    const modalPasswordInput = document.getElementById('modalPasswordInput');
+    const modalJoinBtn = document.getElementById('modalJoinBtn');
+    const modalCancelBtn = document.getElementById('modalCancelBtn');
+
     // ====== TABS ======
     function setActiveTab(tab) {
       if (tab === 'host') {
@@ -281,12 +309,20 @@
         tabViewer.classList.add('text-slate-300');
         hostSection.classList.remove('hidden');
         viewerSection.classList.add('hidden');
+
+        // Show only host preview
+        localCard.classList.remove('hidden');
+        remoteCard.classList.add('hidden');
       } else {
         tabViewer.classList.add('bg-indigo-500', 'text-white', 'shadow');
         tabHost.classList.remove('bg-indigo-500', 'text-white', 'shadow');
         tabHost.classList.add('text-slate-300');
         viewerSection.classList.remove('hidden');
         hostSection.classList.add('hidden');
+
+        // Show only viewer screen
+        remoteCard.classList.remove('hidden');
+        localCard.classList.add('hidden');
       }
     }
 
@@ -302,37 +338,21 @@
       roleStatus.textContent = 'Belum dipilih (link viewer terdeteksi)';
       connectionStatus.textContent = 'Menunggu password viewer...';
 
-      // Popup password otomatis untuk viewer
+      // Tampilkan modal password
       setTimeout(() => {
-        Swal.fire({
-          title: 'Masukkan Password Room',
-          text: 'Host telah mengirim link room, masukkan password yang sama.',
-          input: 'password',
-          inputPlaceholder: 'Password Room',
-          confirmButtonText: 'Gabung',
-          showCancelButton: true,
-          allowOutsideClick: false,
-          inputAttributes: {
-            autocapitalize: 'off'
-          }
-        }).then((result) => {
-          if (result.isConfirmed && result.value) {
-            viewerPasswordInput.value = result.value;
-            startViewer(qRoom, result.value);
-          } else if (result.dismiss === Swal.DismissReason.cancel) {
-            toastInfo('Join viewer dibatalkan.');
-          }
-        });
-      }, 600);
+        passwordModal.classList.remove('hidden');
+        modalPasswordInput.value = '';
+        modalPasswordInput.focus();
+      }, 400);
     } else {
       setActiveTab('host');
     }
 
     // ====== STATUS HELPERS ======
-    function setRoleStatus(text) {
+    function setRoleStatusText(text) {
       roleStatus.textContent = text;
     }
-    function setConnectionStatus(text, color = 'text-amber-300') {
+    function setConnectionStatusText(text) {
       connectionStatus.textContent = text;
     }
 
@@ -365,14 +385,28 @@
       pc.ontrack = event => {
         const [stream] = event.streams;
         remoteVideo.srcObject = stream;
-        setConnectionStatus('Terhubung (stream diterima)');
+        setConnectionStatusText('Terhubung');
         toastSuccess('Viewer berhasil terhubung.');
       };
 
       pc.oniceconnectionstatechange = () => {
         if (!pc) return;
-        if (['failed', 'disconnected', 'closed'].includes(pc.iceConnectionState)) {
-          setConnectionStatus('Terputus / ditutup');
+        const state = pc.iceConnectionState;
+        console.log('ICE state:', state);
+
+        if (state === 'checking') {
+          setConnectionStatusText('Menghubungkan...');
+        } else if (state === 'connected' || state === 'completed') {
+          setConnectionStatusText('Terhubung');
+          if (role === 'broadcaster') {
+            hostStatusText.textContent = 'Terhubung dengan viewer.';
+          }
+        } else if (state === 'disconnected') {
+          setConnectionStatusText('Terputus, mencoba reconnect...');
+        } else if (state === 'failed') {
+          setConnectionStatusText('Gagal menghubungkan');
+        } else if (state === 'closed') {
+          setConnectionStatusText('Koneksi ditutup');
         }
       };
     }
@@ -431,8 +465,8 @@
 
         createPeerConnection();
         role = 'broadcaster';
-        setRoleStatus('Host / Penyiar');
-        setConnectionStatus('Menyiapkan capture layar...');
+        setRoleStatusText('Host / Penyiar');
+        setConnectionStatusText('Menyiapkan capture layar...');
 
         // getDisplayMedia
         localStream = await navigator.mediaDevices.getDisplayMedia({
@@ -455,7 +489,7 @@
         roomLinkInput.value = roomLink;
         hostInfoBox.classList.remove('hidden');
         hostStatusText.textContent = 'Offer dikirim. Menunggu viewer join...';
-        setConnectionStatus('Menunggu viewer...');
+        setConnectionStatusText('Menunggu viewer...');
         toastSuccess('Room dibuat. Link siap dibagikan.');
 
         // Listener Answer dari viewer
@@ -465,7 +499,7 @@
           if (!pc.currentRemoteDescription) {
             await pc.setRemoteDescription(new RTCSessionDescription(answer));
             hostStatusText.textContent = 'Viewer sudah menjawab. Menghubungkan...';
-            setConnectionStatus('Menghubungkan...');
+            setConnectionStatusText('Menghubungkan...');
           }
         });
 
@@ -485,7 +519,7 @@
       } catch (err) {
         console.error(err);
         toastError('Gagal mulai sebagai host: ' + err.message);
-        setConnectionStatus('Error');
+        setConnectionStatusText('Error');
       }
     });
 
@@ -524,8 +558,8 @@
 
         createPeerConnection();
         role = 'viewer';
-        setRoleStatus('Viewer / Penonton');
-        setConnectionStatus('Mengambil offer dari host...');
+        setRoleStatusText('Viewer / Penonton');
+        setConnectionStatusText('Mengambil offer dari host...');
 
         // Ambil offer
         const offerSnap = await roomRef.child('offer').once('value');
@@ -544,7 +578,7 @@
           sdp: answer.sdp
         });
 
-        setConnectionStatus('Menunggu stream dari host...');
+        setConnectionStatusText('Menghubungkan...');
 
         // Listener ICE dari host
         broadcasterCandidatesListener = roomRef.child('broadcasterCandidates').on('child_added', async snap => {
@@ -563,9 +597,31 @@
       } catch (err) {
         console.error(err);
         toastError('Gagal join sebagai viewer: ' + err.message);
-        setConnectionStatus('Error');
+        setConnectionStatusText('Error');
       }
     }
+
+    // ====== PASSWORD MODAL HANDLER (VIEWER LINK MODE) ======
+    modalJoinBtn.addEventListener('click', () => {
+      const pwd = modalPasswordInput.value.trim();
+      if (!pwd) {
+        toastError('Password tidak boleh kosong.');
+        return;
+      }
+      const roomId = viewerRoomIdInput.value.trim();
+      if (!roomId) {
+        toastError('Room ID tidak ditemukan di URL.');
+        return;
+      }
+      passwordModal.classList.add('hidden');
+      viewerPasswordInput.value = pwd;
+      startViewer(roomId, pwd);
+    });
+
+    modalCancelBtn.addEventListener('click', () => {
+      passwordModal.classList.add('hidden');
+      toastInfo('Join viewer dibatalkan.');
+    });
 
     // ====== FULLSCREEN ======
     btnFullscreen.addEventListener('click', () => {
@@ -602,8 +658,8 @@
         roomRef = null;
         role = null;
         btnHangup.disabled = true;
-        setRoleStatus('Belum dipilih');
-        setConnectionStatus('Disconnected');
+        setRoleStatusText('Belum dipilih');
+        setConnectionStatusText('Disconnected');
         toastInfo('Koneksi ditutup. Refresh halaman jika ingin mulai lagi.');
       } catch (err) {
         console.error(err);
