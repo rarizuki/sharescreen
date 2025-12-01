@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Local Screen Share - WebRTC (No App)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * {
+      box-sizing: border-box;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 16px;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+    h1 {
+      margin-top: 0;
+      text-align: center;
+    }
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      padding: 8px 16px;
+      border-radius: 999px;
+      border: 1px solid #334155;
+      background: #020617;
+      color: #e5e7eb;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .tab-btn.active {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: white;
+    }
+    .panel {
+      border-radius: 12px;
+      border: 1px solid #1e293b;
+      padding: 16px;
+      background: #020617;
+      display: none;
+    }
+    .panel.active {
+      display: block;
+    }
+    label {
+      font-size: 13px;
+      display: block;
+      margin-bottom: 4px;
+      color: #cbd5f5;
+    }
+    textarea {
+      width: 100%;
+      min-height: 100px;
+      resize: vertical;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #1f2933;
+      background: #020617;
+      color: #e5e7eb;
+      font-size: 12px;
+      font-family: monospace;
+    }
+    button {
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      margin-top: 6px;
+      margin-right: 6px;
+      background: #3b82f6;
+      color: white;
+    }
+    button.secondary {
+      background: #111827;
+      border: 1px solid #374151;
+    }
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-top: 16px;
+    }
+    .col {
+      flex: 1 1 300px;
+      min-width: 0;
+    }
+    video {
+      width: 100%;
+      max-height: 350px;
+      background: #020617;
+      border-radius: 12px;
+      border: 1px solid #1e293b;
+      object-fit: contain;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      background: #111827;
+      border: 1px solid #374151;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .status {
+      font-size: 12px;
+      margin-top: 8px;
+      color: #9ca3af;
+    }
+    .status span {
+      font-weight: 600;
+      color: #e5e7eb;
+    }
+    .hint {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-top: 4px;
+    }
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #1f2933;
+      background: #020617;
+      color: #e5e7eb;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+    @media (max-width: 600px) {
+      body {
+        padding: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Local Screen Share (WebRTC, No App)</h1>
+    <p style="text-align:center;font-size:13px;color:#9ca3af;">
+      Pilih mode: <strong>Penyiar</strong> (yang share layar) atau <strong>Penonton</strong> (yang melihat).<br>
+      Pertukaran kode (Offer/Answer) dilakukan manual via copy–paste.
+    </p>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-target="#panel-broadcaster">Mode Penyiar</button>
+      <button class="tab-btn" data-target="#panel-viewer">Mode Penonton</button>
+    </div>
+
+    <!-- PANEL PENYIAR -->
+    <div id="panel-broadcaster" class="panel active">
+      <div class="badge">Mode Penyiar</div>
+      <p style="font-size:13px;">
+        1) Isi <strong>Room Key</strong> dan share ke Penonton.<br>
+        2) Klik <strong>Mulai Share Screen</strong> → pilih layar/jendela/tab.<br>
+        3) Klik <strong>Buat Offer</strong> → kirim teks Offer ke Penonton.<br>
+        4) Terima Answer dari Penonton → paste dan <strong>Set Answer</strong>.
+      </p>
+
+      <label for="roomKeyBroadcaster">Room Key / Password (disepakati bersama):</label>
+      <input id="roomKeyBroadcaster" type="password" placeholder="contoh: meeting-123" />
+      <p class="hint">
+        Beritahu Penonton Room Key yang sama. Ini hanya filter sederhana (bukan enkripsi/OTP).
+      </p>
+
+      <div class="row">
+        <div class="col">
+          <label>Layar kamu (preview yang dishare):</label>
+          <video id="localVideo" autoplay playsinline muted></video>
+          <div class="status" id="broadcasterStatus">
+            Status: <span>Belum mulai</span>
+          </div>
+
+          <button id="btnStartShare">1. Mulai Share Screen</button>
+          <button id="btnCreateOffer" disabled>2. Buat Offer (copy ke Penonton)</button>
+        </div>
+
+        <div class="col">
+          <label for="offerOut">Offer untuk dikirim ke Penonton:</label>
+          <textarea id="offerOut" placeholder="Klik 'Buat Offer' lalu copy teks ini ke Penonton"></textarea>
+          <div class="hint">Kirim teks ini ke Penonton (WA/Telegram/dll).</div>
+
+          <label for="answerIn" style="margin-top:12px;">Answer dari Penonton (paste di sini):</label>
+          <textarea id="answerIn" placeholder="Paste Answer yang dikirim dari Penonton di sini"></textarea>
+          <button id="btnSetAnswer">4. Set Answer (selesai)</button>
+          <div class="hint">
+            Setelah Answer diset, koneksi akan tersambung dan Penonton bisa melihat layar kamu.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PANEL PENONTON -->
+    <div id="panel-viewer" class="panel">
+      <div class="badge">Mode Penonton</div>
+      <p style="font-size:13px;">
+        1) Isi <strong>Room Key</strong> yang dikasih Penyiar.<br>
+        2) Terima teks Offer dari Penyiar → paste di kolom Offer.<br>
+        3) Klik <strong>Set Offer lalu Buat Answer</strong> → kirim Answer ke Penyiar.<br>
+        4) Setelah Penyiar set Answer, video akan muncul di bawah.
+      </p>
+
+      <label for="roomKeyViewer">Room Key / Password (disepakati bersama):</label>
+      <input id="roomKeyViewer" type="password" placeholder="contoh: meeting-123" />
+      <p class="hint">
+        Gunakan Room Key yang sama seperti yang diberikan oleh Penyiar.
+      </p>
+
+      <div class="row">
+        <div class="col">
+          <label for="offerIn">Offer dari Penyiar (paste di sini):</label>
+          <textarea id="offerIn" placeholder='Paste teks Offer dari Penyiar di sini'></textarea>
+          <button id="btnSetOfferAndCreateAnswer">3. Set Offer lalu Buat Answer</button>
+
+          <label for="answerOut" style="margin-top:12px;">Answer untuk dikirim ke Penyiar:</label>
+          <textarea id="answerOut" placeholder="Answer akan muncul di sini. Kirim kembali ke Penyiar."></textarea>
+          <div class="hint">
+            Kirim teks Answer ini ke Penyiar agar koneksi tersambung.
+          </div>
+        </div>
+
+        <div class="col">
+          <label>Layar dari Penyiar:</label>
+          <video id="remoteVideo" autoplay playsinline></video>
+          <div class="status" id="viewerStatus">
+            Status: <span>Menunggu Offer...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ====== TAB SWITCHING ======
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const panels = document.querySelectorAll('.panel');
+
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        tabButtons.forEach(b => b.classList.remove('active'));
+        panels.forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        const target = document.querySelector(btn.dataset.target);
+        if (target) target.classList.add('active');
+      });
+    });
+
+    // ====== WEBRTC CORE OBJECTS ======
+    // Pakai STUN agar lebih mudah terkoneksi di jaringan berbeda (bukan cuma LAN).
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" }
+      ]
+    });
+
+    // Video elements
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+
+    // Status labels
+    const broadcasterStatus = document.getElementById('broadcasterStatus').querySelector('span');
+    const viewerStatus = document.getElementById('viewerStatus').querySelector('span');
+
+    // Penyiar elements
+    const btnStartShare = document.getElementById('btnStartShare');
+    const btnCreateOffer = document.getElementById('btnCreateOffer');
+    const offerOut = document.getElementById('offerOut');
+    const answerIn = document.getElementById('answerIn');
+    const btnSetAnswer = document.getElementById('btnSetAnswer');
+
+    // Penonton elements
+    const offerIn = document.getElementById('offerIn');
+    const btnSetOfferAndCreateAnswer = document.getElementById('btnSetOfferAndCreateAnswer');
+    const answerOut = document.getElementById('answerOut');
+
+    // Room keys
+    const roomKeyBroadcaster = document.getElementById('roomKeyBroadcaster');
+    const roomKeyViewer = document.getElementById('roomKeyViewer');
+
+    let localStream = null;
+
+    // Ketika ada track masuk (Penonton akan menerima ini)
+    pc.ontrack = (event) => {
+      const [stream] = event.streams;
+      console.log('Menerima stream dari Penyiar', stream);
+      remoteVideo.srcObject = stream;
+      viewerStatus.textContent = 'Terhubung ke Penyiar. Layar tampil.';
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log('ICE connection state:', pc.iceConnectionState);
+      if (['failed', 'disconnected', 'closed'].includes(pc.iceConnectionState)) {
+        broadcasterStatus.textContent = 'Koneksi terputus.';
+        viewerStatus.textContent = 'Koneksi terputus.';
+      }
+    };
+
+    // Kumpulkan ICE candidate ke dalam localDescription yang sudah lengkap
+    function gatherCompleteLocalDescription(callback) {
+      const timeoutMs = 2500; // 2.5 detik
+      setTimeout(() => {
+        if (pc.localDescription) {
+          callback(pc.localDescription);
+        } else {
+          callback(null);
+        }
+      }, timeoutMs);
+    }
+
+    // ====== PENYIAR: MULAI SHARE SCREEN ======
+    btnStartShare.addEventListener('click', async () => {
+      if (!roomKeyBroadcaster.value.trim()) {
+        alert('Isi Room Key / Password terlebih dahulu.');
+        return;
+      }
+
+      try {
+        localStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true // set false jika tidak ingin share audio
+        });
+
+        localVideo.srcObject = localStream;
+        broadcasterStatus.textContent = 'Layar berhasil di-capture. Siap membuat Offer.';
+
+        localStream.getTracks().forEach(track => {
+          pc.addTrack(track, localStream);
+        });
+
+        btnCreateOffer.disabled = false;
+      } catch (err) {
+        console.error('Gagal capture layar:', err);
+        broadcasterStatus.textContent = 'Gagal capture layar: ' + err.message;
+      }
+    });
+
+    // ====== PENYIAR: BUAT OFFER ======
+    btnCreateOffer.addEventListener('click', async () => {
+      if (!roomKeyBroadcaster.value.trim()) {
+        alert('Isi Room Key / Password terlebih dahulu.');
+        return;
+      }
+
+      try {
+        broadcasterStatus.textContent = 'Membuat Offer...';
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        gatherCompleteLocalDescription((fullDesc) => {
+          if (!fullDesc) {
+            broadcasterStatus.textContent = 'Gagal mendapatkan Offer lengkap.';
+            return;
+          }
+
+          // Tambahkan sedikit informasi room key di hint (bukan di SDP).
+          offerOut.value = JSON.stringify(fullDesc);
+          broadcasterStatus.textContent = 'Offer dibuat. Kirim ke Penonton.';
+        });
+      } catch (err) {
+        console.error('Gagal membuat Offer:', err);
+        broadcasterStatus.textContent = 'Gagal membuat Offer: ' + err.message;
+      }
+    });
+
+    // ====== PENYIAR: SET ANSWER DARI PENONTON ======
+    btnSetAnswer.addEventListener('click', async () => {
+      if (!roomKeyBroadcaster.value.trim()) {
+        alert('Pastikan Room Key diisi (harus sama dengan yang digunakan Penonton).');
+        return;
+      }
+
+      try {
+        const answerText = answerIn.value.trim();
+        if (!answerText) {
+          alert('Masukkan Answer dari Penonton terlebih dahulu.');
+          return;
+        }
+
+        const answer = JSON.parse(answerText);
+        await pc.setRemoteDescription(answer);
+        broadcasterStatus.textContent = 'Answer diset. Koneksi seharusnya sudah tersambung.';
+      } catch (err) {
+        console.error('Gagal set Answer:', err);
+        broadcasterStatus.textContent = 'Gagal set Answer: ' + err.message;
+      }
+    });
+
+    // ====== PENONTON: SET OFFER & BUAT ANSWER ======
+    btnSetOfferAndCreateAnswer.addEventListener('click', async () => {
+      if (!roomKeyViewer.value.trim()) {
+        alert('Isi Room Key / Password terlebih dahulu.');
+        return;
+      }
+
+      try {
+        const offerText = offerIn.value.trim();
+        if (!offerText) {
+          alert('Masukkan Offer dari Penyiar terlebih dahulu.');
+          return;
+        }
+
+        viewerStatus.textContent = 'Memproses Offer dari Penyiar...';
+
+        const offer = JSON.parse(offerText);
+        await pc.setRemoteDescription(offer);
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        gatherCompleteLocalDescription((fullDesc) => {
+          if (!fullDesc) {
+            viewerStatus.textContent = 'Gagal membuat Answer lengkap.';
+            return;
+          }
+          answerOut.value = JSON.stringify(fullDesc);
+          viewerStatus.textContent = 'Answer dibuat. Kirim ke Penyiar.';
+        });
+      } catch (err) {
+        console.error('Gagal memproses Offer / membuat Answer:', err);
+        viewerStatus.textContent = 'Error: ' + err.message;
+      }
+    });
+  </script>
+</body>
+</html>
